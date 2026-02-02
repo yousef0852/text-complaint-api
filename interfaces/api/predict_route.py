@@ -28,12 +28,11 @@ router = APIRouter(prefix="/predict", tags=["Prediction"])
 def get_model_loader(request: Request):
     return request.app.state.model_loader
 
-@router.post("/", response_model=ComplaintResponse)
+@router.post("", response_model=ComplaintResponse)
 async def predict_complaint(request: ComplaintRequest, loader = Depends(get_model_loader)):
     result = run_pipeline(request.text, loader)
     return result
 
-
-
-
-    
+@router.get("/health")
+async def health_check():
+    return {"status": "ok"}

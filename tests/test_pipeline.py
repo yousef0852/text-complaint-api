@@ -11,11 +11,20 @@ from core.pipeline import (
 )
 from interfaces.schemas.complaint import PredictionDetail, ActionDetail, ComplaintResponse
 from interfaces.schemas.enums import SentimentLabel, TopicLabel, ActionLabel
+from services.model_loader import ModelLoader
+
+class MockModelLoader:
+    def __init__(self):
+        self.sentiment_model = MagicMock()
+        self.topic_model = MagicMock()
+        self.action_model = MagicMock()
+        self.device = -1
 
 class TestPredictSentiment:
     def test_predict_sentiment_returns_prediction_detail(self):
         """Test that predict_sentiment returns a PredictionDetail object."""
-        result = predict_sentiment("This is a test")
+        mock_loader = MockModelLoader()
+        result = predict_sentiment("This is a test", mock_loader)
         assert isinstance(result, PredictionDetail)
         assert hasattr(result, 'label')
         assert hasattr(result, 'confidence')
@@ -24,7 +33,8 @@ class TestPredictSentiment:
 class TestPredictTopic:
     def test_predict_topic_returns_prediction_detail(self):
         """Test that predict_topic returns a PredictionDetail object."""
-        result = predict_topic("This is a test")
+        mock_loader = MockModelLoader()
+        result = predict_topic("This is a test", mock_loader)
         assert isinstance(result, PredictionDetail)
         assert hasattr(result, 'label')
         assert hasattr(result, 'confidence')
@@ -33,7 +43,8 @@ class TestPredictTopic:
 class TestPredictIntent:
     def test_predict_intent_returns_prediction_detail(self):
         """Test that predict_intent returns a PredictionDetail object."""
-        result = predict_intent("This is a test")
+        mock_loader = MockModelLoader()
+        result = predict_intent("This is a test", mock_loader)
         assert isinstance(result, PredictionDetail)
         assert hasattr(result, 'label')
         assert hasattr(result, 'confidence')
@@ -122,6 +133,7 @@ class TestRunPipeline:
     def test_run_pipeline_returns_complaint_response(self, mock_intent, mock_topic, mock_sentiment):
         """Test that run_pipeline returns a ComplaintResponse with all expected fields."""
         # Setup mocks
+        mock_loader = MockModelLoader()
         mock_sentiment.return_value = PredictionDetail(
             label=SentimentLabel.NEG,
             confidence=0.95,
@@ -139,7 +151,7 @@ class TestRunPipeline:
         )
 
         # Call the function
-        result = run_pipeline("This is a test complaint")
+        result = run_pipeline("This is a test complaint", mock_loader)
 
         # Assert the result
         assert isinstance(result, ComplaintResponse)
@@ -158,6 +170,7 @@ class TestRunPipeline:
         mock_clean_text = MagicMock()
         mock_clean_text.text = "cleaned text"
         mock_arabic_input.return_value = mock_clean_text
+        mock_loader = MockModelLoader()
 
         # Setup other mocks
         with patch('core.pipeline.predict_sentiment') as mock_sentiment, \
@@ -181,12 +194,12 @@ class TestRunPipeline:
             )
 
             # Call with dirty input
-            run_pipeline("  dirty text with spaces  ")
+            run_pipeline("  dirty text with spaces  ", mock_loader)
             
             # Verify ArabicInput was called with the stripped text
             mock_arabic_input.assert_called_once_with(text="dirty text with spaces")
             
             # Verify the prediction functions were called with the cleaned text
-            mock_sentiment.assert_called_once_with("cleaned text")
-            mock_topic.assert_called_once_with("cleaned text")
-            mock_intent.assert_called_once_with("cleaned text")
+            mock_sentiment.assert_called_once_with("cleaned text", mock_loader)
+            mock_topic.assert_called_once_with("cleaned text", mock_loader)
+            mock_intent.assert_called_once_with("cleaned text", mock_loader)

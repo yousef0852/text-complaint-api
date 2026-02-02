@@ -1,46 +1,89 @@
-# Text Complaint Mini Pipeline API
+# Dialect Complaint Analysis API (MARBERT-v2)
 
-A small, clean AI pipeline API that analyzes customer complaint text and produces
-structured, explainable outputs.
+An intelligent, multi-stage AI pipeline designed to analyze customer complaints in Saudi dialect and provide structured, explainable resolutions.
 
-## Overview
+## 📊 System Architecture
 
-This project receives free-form complaint text (Arabic/English mixed) and returns:
-- Sentiment classification
-- Topic classification
-- High-level intent
-- A deterministic, explainable final action
+The system follows a modular Clean Architecture pattern, separating HTTP concerns from the core AI orchestration logic.
 
-The system is designed for clarity, reliability, and explainability rather than
-production-scale performance.
+- **API Layer**: FastAPI handles request validation and lifecycle management (Lifespan).
+- **Orchestration Layer**: A central pipeline coordinates the sequence of preprocessing, inference, and mapping.
+- **Inference Layer**: Leveraging MARBERT-v2 for high-accuracy Arabic NLP.
+- **Logic Layer**: A deterministic rule engine maps model outputs to business-level actions.
 
-## System Scope
+## 🚀 Features & Capabilities
 
-- Single FastAPI service
-- In-process model inference
-- Local file system for optional logging
-- No database
-- No external services
+- **Multi-Model Inference**: Specialized models for Sentiment, Topic, and Intent classification.
+- **Secure Authentication**: Integrated with Hugging Face Hub for private model access.
+- **Deterministic Actions**: Logic-based routing for critical issues like POLICY_SECURITY or FINANCIAL_ESCALATION.
+- **Confidence Guarding**: Automatic MANUAL_REVIEW override if any model falls below a 0.7 confidence threshold.
+- **Clean Preprocessing**: Custom ArabicInput handler to strip whitespace and normalize inputs.
 
-This is a foundation project focused on system design and correctness.
+## 🛠️ Technical Stack
 
-## High-Level Pipeline
+| Component | Technology |
+|-----------|------------|
+| Framework | FastAPI |
+| NLP Engine | Hugging Face Transformers |
+| Model | MARBERT-v2 (Dialectal Arabic BERT) |
+| Data Validation | Pydantic v2 |
+| Server | Uvicorn with Auto-reload |
 
-1. Input validation
-2. Text preprocessing
-3. Sentiment classification
-4. Topic classification
-5. Intent classification
-6. Rule-based action mapping
-7. Structured JSON response
+## 🔌 API Specification
 
-## API Interface (Conceptual)
+### Predict Complaint
 
-- Endpoint: `POST /predict`
-- Input: `{ "text": "complaint text" }`
-- Output: structured JSON with predictions, confidence scores, and explanations
+**POST** `/predict/`
 
-## Status
+#### Sample Request Body:
+```json
+{
+  "text": "التطبيق يعلق وقت الدفع، حاولت أكثر من مرة وما يضبط معي"
+}
+```
 
-🚧 Early development — structure and foundations first.
-Business logic and models will be added incrementally.
+#### Successful Response Structure:
+```json
+{
+  "sentiment": {
+    "label": "NEG",
+    "confidence": 0.97,
+    "explanation": "Sentiment analysis complete."
+  },
+  "topic": {
+    "label": "TECHNICAL",
+    "confidence": 1.0,
+    "explanation": "Topic: LABEL_2 -> TECHNICAL"
+  },
+  "action": {
+    "label": "TECH_SUPPORT_ESCALATION",
+    "decision_source": "RULE_ENGINE"
+  },
+  "meta": {
+    "model_version": "MARBERT-v2"
+  }
+}
+```
+
+## ⚙️ Installation & Setup
+
+### Environment Setup:
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Hugging Face Login (Required for private MARBERT models):
+```bash
+huggingface-cli login
+```
+
+### Run Server:
+```bash
+uvicorn main:app --reload
+```
+
+## 🏁 Status: Functional Foundation
+
+The core inference engine and logic mapping are fully implemented and verified.

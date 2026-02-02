@@ -6,6 +6,7 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+*.so
 
 # =========================
 # Virtual Environments
@@ -30,7 +31,7 @@ outputs/
 *.log
 
 # =========================
-# Model artifacts
+# Model artifacts & ML cache
 # =========================
 models/
 checkpoints/
@@ -38,6 +39,20 @@ checkpoints/
 *.pt
 *.pth
 *.onnx
+.huggingface/
+.cache/
+
+# =========================
+# Data files
+# =========================
+data/
+datasets/
+*.csv
+*.json
+*.jsonl
+*.parquet
+*.pkl
+*.pickle
 
 # =========================
 # IDE / OS
@@ -45,9 +60,34 @@ checkpoints/
 .vscode/
 .idea/
 .DS_Store
+Thumbs.db
 
 # =========================
 # Test cache
 # =========================
 .pytest_cache/
 .coverage
+htmlcov/
+
+# =========================
+# Package files
+# =========================
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+
+# =========================
+# Jupyter notebooks
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Temporary files
+# =========================
+*.tmp
+*.temp
+*.swp
+*.swo
+*~

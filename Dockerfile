@@ -1,24 +1,29 @@
-FROM python:3.12.11-slim
+# Use smaller base image
+FROM python:3.12-slim-bullseye
 
-# Install system dependencies first
-RUN apt-get update && apt-get install -y \
+# Install system dependencies and cleanup in same layer
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/* \
+    && rm -rf /var/tmp/*
 
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Copy and install requirements in separate layer for better caching
+# Copy and install requirements with optimizations
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip cache purge
 
-# Copy application code after dependencies are installed
+# Copy application code
 COPY . .
 
-# Setup user and directories in single RUN command
+# Setup user and directories
 RUN useradd --create-home --shell /bin/bash app && \
     mkdir -p /app/logs && \
     chown -R app:app /app

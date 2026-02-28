@@ -1,22 +1,12 @@
-# Use Python 3.11 for better PyTorch compatibility
-FROM python:3.11-slim-bullseye
-
-# Install system dependencies and cleanup in same layer
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    g++ \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /tmp/* \
-    && rm -rf /var/tmp/*
+FROM python:3.11-slim
 
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Copy and install requirements with optimizations
+# Copy and install requirements with CPU-only torch
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     pip cache purge
 

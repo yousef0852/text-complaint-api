@@ -1,29 +1,32 @@
-"""
-HTTP interface for the /predict endpoint.
-
-Responsibilities:
-- Define the POST /predict route.
-- Accept and validate incoming HTTP requests using schemas.
-- Delegate the request to the core pipeline.
-- Map domain errors to appropriate HTTP responses.
-
-This module MUST NOT:
-- Perform text preprocessing.
-- Run ML models or inference.
-- Apply business rules or action mapping.
-- Contain core decision logic.
-
-This file acts strictly as an HTTP adapter.
-"""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException
 from interfaces.schemas.complaint import ComplaintRequest, ComplaintResponse
 from core.pipeline import run_pipeline
-from fastapi import Depends
-
-
-from fastapi import APIRouter, Depends, Request, HTTPException
+from configs.config import settings
+import json
+import os
+from datetime import datetime
 
 router = APIRouter(prefix="/predict", tags=["Prediction"])
+
+LOGS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "logs")
+LOGS_FILE = os.path.join(LOGS_DIR, "predictions.json")
+
+def save_prediction_log(input_text: str, response: ComplaintResponse):
+    os.makedirs(LOGS_DIR, exist_ok=True)
+
+    entries = []
+    if os.path.exists(LOGS_FILE):
+        with open(LOGS_FILE, "r", encoding="utf-8") as f:
+            entries = json.load(f)
+
+    entries.append({
+        "timestamp": datetime.now().isoformat(),
+        "input_text": input_text,
+        "response": response.model_dump(mode="json")
+    })
+
+    with open(LOGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(entries, f, ensure_ascii=False, indent=2)
 
 def get_model_loader(request: Request):
     return request.app.state.model_loader
@@ -31,8 +34,6 @@ def get_model_loader(request: Request):
 @router.post("", response_model=ComplaintResponse)
 async def predict_complaint(request: ComplaintRequest, loader = Depends(get_model_loader)):
     result = run_pipeline(request.text, loader)
+    if settings.ENABLE_PREDICTION_LOGGING:
+        save_prediction_log(request.text, result)
     return result
-
-@router.get("/health")
-async def health_check():
-    return {"status": "ok"}

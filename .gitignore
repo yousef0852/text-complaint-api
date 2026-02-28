@@ -1,6 +1,3 @@
-# =========================
-# Python
-# =========================
 __pycache__/
 *.py[cod]
 *.pyo
@@ -8,31 +5,19 @@ __pycache__/
 .Python
 *.so
 
-# =========================
-# Virtual Environments
-# =========================
 venv/
 .venv/
 env/
 ENV/
 
-# =========================
-# Environment variables
-# =========================
 .env
 .env.*
 
-# =========================
-# Logs & runtime outputs
-# =========================
 logs/
 results/
 outputs/
 *.log
 
-# =========================
-# Model artifacts & ML cache
-# =========================
 models/
 checkpoints/
 *.bin
@@ -42,9 +27,6 @@ checkpoints/
 .huggingface/
 .cache/
 
-# =========================
-# Data files
-# =========================
 data/
 datasets/
 *.csv
@@ -54,38 +36,23 @@ datasets/
 *.pkl
 *.pickle
 
-# =========================
-# IDE / OS
-# =========================
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 
-# =========================
-# Test cache
-# =========================
 .pytest_cache/
 .coverage
 htmlcov/
 
-# =========================
-# Package files
-# =========================
 *.egg
 *.egg-info/
 dist/
 build/
 eggs/
 
-# =========================
-# Jupyter notebooks
-# =========================
 .ipynb_checkpoints/
 
-# =========================
-# Temporary files
-# =========================
 *.tmp
 *.temp
 *.swp

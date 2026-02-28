@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from interfaces.schemas.complaint import (
     ComplaintRequest,
     ComplaintResponse,
@@ -15,6 +15,10 @@ from interfaces.api.predict_route import router as predict_router
 
 app = FastAPI()
 app.include_router(predict_router)
+
+mock_loader = MagicMock()
+app.state.model_loader = mock_loader
+
 client = TestClient(app)
 
 def test_predict_endpoint():
@@ -44,7 +48,7 @@ def test_predict_endpoint():
         test_text = "التطبيق يعلق"
         
         response = client.post(
-            "/predict/",
+            "/predict",
             json={"text": test_text}
         )
         
@@ -60,12 +64,11 @@ def test_predict_endpoint():
         assert "action" in response_data
         assert response_data["action"]["label"] == "CREATE_JIRA_TICKET"
         
-        mock_pipeline.assert_called_once_with(test_text)
+        mock_pipeline.assert_called_once_with(test_text, mock_loader)
 
 def test_predict_empty_text():
     response = client.post(
-        "/predict/",
+        "/predict",
         json={"text": ""}
     )
-    assert response.status_code == 422  
-    
+    assert response.status_code == 422

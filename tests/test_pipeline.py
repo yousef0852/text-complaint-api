@@ -1,5 +1,3 @@
-"""Unit tests for the pipeline module."""
-
 import pytest
 from unittest.mock import patch, MagicMock
 from core.pipeline import (
@@ -15,14 +13,13 @@ from services.model_loader import ModelLoader
 
 class MockModelLoader:
     def __init__(self):
-        self.sentiment_model = MagicMock()
-        self.topic_model = MagicMock()
-        self.action_model = MagicMock()
+        self.sentiment_model = MagicMock(return_value=[[{"label":"LABEL_0","score":0.95}]])
+        self.topic_model = MagicMock(return_value=[[{"label":"LABEL_2","score":0.90}]])
+        self.action_model = MagicMock(return_value=[[{"label":"LABEL_1","score":0.85}]])
         self.device = -1
 
 class TestPredictSentiment:
     def test_predict_sentiment_returns_prediction_detail(self):
-        """Test that predict_sentiment returns a PredictionDetail object."""
         mock_loader = MockModelLoader()
         result = predict_sentiment("This is a test", mock_loader)
         assert isinstance(result, PredictionDetail)
@@ -32,7 +29,6 @@ class TestPredictSentiment:
 
 class TestPredictTopic:
     def test_predict_topic_returns_prediction_detail(self):
-        """Test that predict_topic returns a PredictionDetail object."""
         mock_loader = MockModelLoader()
         result = predict_topic("This is a test", mock_loader)
         assert isinstance(result, PredictionDetail)
@@ -42,7 +38,6 @@ class TestPredictTopic:
 
 class TestPredictIntent:
     def test_predict_intent_returns_prediction_detail(self):
-        """Test that predict_intent returns a PredictionDetail object."""
         mock_loader = MockModelLoader()
         result = predict_intent("This is a test", mock_loader)
         assert isinstance(result, PredictionDetail)
@@ -52,7 +47,6 @@ class TestPredictIntent:
 
 class TestMapAction:
     def test_map_action_security_topic_blocks(self):
-        """Test that security topics are blocked and reviewed."""
         result = map_action(
             sentiment=SentimentLabel.POS,
             topic=TopicLabel.POLICY_SECURITY,
@@ -62,7 +56,6 @@ class TestMapAction:
         assert result.decision_source == "RULE_ENGINE"
 
     def test_map_action_negative_financial_escalates(self):
-        """Test that negative financial complaints are escalated."""
         result = map_action(
             sentiment=SentimentLabel.NEG,
             topic=TopicLabel.FINANCIAL,
@@ -71,7 +64,6 @@ class TestMapAction:
         assert result.label == "FINANCIAL_ESCALATION"
 
     def test_map_action_tech_bug_creates_ticket(self):
-        """Test that tech bug reports create JIRA tickets."""
         result = map_action(
             sentiment=SentimentLabel.NEU,
             topic=TopicLabel.TECH,
@@ -80,7 +72,6 @@ class TestMapAction:
         assert result.label == "CREATE_JIRA_TICKET"
 
     def test_map_action_negative_tech_escalates(self):
-        """Test that negative tech complaints are escalated."""
         result = map_action(
             sentiment=SentimentLabel.NEG,
             topic=TopicLabel.TECH,
@@ -89,7 +80,6 @@ class TestMapAction:
         assert result.label == "TECH_SUPPORT_ESCALATION"
 
     def test_map_action_content_modification(self):
-        """Test that content-related user requests go to content modification queue."""
         result = map_action(
             sentiment=SentimentLabel.NEU,
             topic=TopicLabel.CONTENT,
@@ -98,27 +88,22 @@ class TestMapAction:
         assert result.label == "CONTENT_MODIFICATION_QUEUE"
 
     def test_map_action_positive_sentiment_thanks(self):
-        """Test that positive feedback gets a thank you response."""
         result = map_action(
             sentiment=SentimentLabel.POS,
-            topic=TopicLabel.CONTENT,  # Using CONTENT as a general topic
+            topic=TopicLabel.CONTENT,
             action_intent=ActionLabel.GENERAL_NOTE
         )
         assert result.label == "AUTO_REPLY_THANK_YOU"
 
     def test_map_action_neutral_note_archives(self):
-        """Test that neutral general notes are archived."""
         result = map_action(
             sentiment=SentimentLabel.NEU,
-            topic=TopicLabel.CONTENT,  # Using CONTENT as a general topic
+            topic=TopicLabel.CONTENT,
             action_intent=ActionLabel.GENERAL_NOTE
         )
         assert result.label == "ARCHIVE_NOTE"
 
     def test_map_action_default_routing(self):
-        """Test that unmatched cases go to general support."""
-        # Using a combination that doesn't match any specific rule
-        # Using FINANCIAL with NEU sentiment and USER_REQUEST intent doesn't match any specific rule
         result = map_action(
             sentiment=SentimentLabel.NEU,
             topic=TopicLabel.FINANCIAL,
@@ -131,8 +116,6 @@ class TestRunPipeline:
     @patch('core.pipeline.predict_topic')
     @patch('core.pipeline.predict_intent')
     def test_run_pipeline_returns_complaint_response(self, mock_intent, mock_topic, mock_sentiment):
-        """Test that run_pipeline returns a ComplaintResponse with all expected fields."""
-        # Setup mocks
         mock_loader = MockModelLoader()
         mock_sentiment.return_value = PredictionDetail(
             label=SentimentLabel.NEG,
@@ -150,40 +133,34 @@ class TestRunPipeline:
             explanation="Test intent"
         )
 
-        # Call the function
         result = run_pipeline("This is a test complaint", mock_loader)
 
-        # Assert the result
         assert isinstance(result, ComplaintResponse)
         assert hasattr(result, 'sentiment')
         assert hasattr(result, 'topic')
         assert hasattr(result, 'intent')
         assert hasattr(result, 'action')
-        
-        # Verify the action was determined correctly based on the mocked predictions
+
         assert result.action.label == "TECH_SUPPORT_ESCALATION"
 
     @patch('core.pipeline.ArabicInput')
     def test_run_pipeline_cleans_input_text(self, mock_arabic_input):
-        """Test that the input text is properly cleaned before processing."""
-        # Setup mock for ArabicInput
         mock_clean_text = MagicMock()
         mock_clean_text.text = "cleaned text"
         mock_arabic_input.return_value = mock_clean_text
         mock_loader = MockModelLoader()
 
-        # Setup other mocks
         with patch('core.pipeline.predict_sentiment') as mock_sentiment, \
              patch('core.pipeline.predict_topic') as mock_topic, \
              patch('core.pipeline.predict_intent') as mock_intent:
-            
+
             mock_sentiment.return_value = PredictionDetail(
                 label=SentimentLabel.NEU,
                 confidence=0.5,
                 explanation="Test"
             )
             mock_topic.return_value = PredictionDetail(
-                label=TopicLabel.CONTENT,  # Using CONTENT as a general topic
+                label=TopicLabel.CONTENT,
                 confidence=0.5,
                 explanation="Test"
             )
@@ -193,13 +170,10 @@ class TestRunPipeline:
                 explanation="Test"
             )
 
-            # Call with dirty input
             run_pipeline("  dirty text with spaces  ", mock_loader)
-            
-            # Verify ArabicInput was called with the stripped text
+
             mock_arabic_input.assert_called_once_with(text="dirty text with spaces")
-            
-            # Verify the prediction functions were called with the cleaned text
+
             mock_sentiment.assert_called_once_with("cleaned text", mock_loader)
             mock_topic.assert_called_once_with("cleaned text", mock_loader)
             mock_intent.assert_called_once_with("cleaned text", mock_loader)

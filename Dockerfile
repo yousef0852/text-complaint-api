@@ -1,5 +1,5 @@
-# Use smaller base image
-FROM python:3.12-slim-bullseye
+# Use Python 3.11 for better PyTorch compatibility
+FROM python:3.11-slim-bullseye
 
 # Install system dependencies and cleanup in same layer
 RUN apt-get update && apt-get install -y --no-install-recommends \

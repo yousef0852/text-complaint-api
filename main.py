@@ -36,13 +36,16 @@ async def lifespan(app: FastAPI):
         print(f"   Model: {e.model_name}")
         print(f"   Reason: {e.reason}")
         print(f"   Error Code: {e.error_code}")
+        print(" Continuing without models for debugging...")
     except ConfigurationError as e:
         print(f" Configuration error: {e}")
         print(f"   Config Key: {e.config_key}")
         print(f"   Reason: {e.reason}")
         print(f"   Error Code: {e.error_code}")
+        print(" Continuing without models for debugging...")
     except Exception as e:
         print(f" Unexpected error during model loading: {e}")
+        print(" Continuing without models for debugging...")
     
     yield
     

@@ -60,7 +60,7 @@ def run_pipeline(text: str, model_loader: ModelLoader) -> ComplaintResponse:
     logger = get_logger("pipeline")
 
     raw_len = len(text or "")
-    logger.info("pipeline_started", raw_text_len=raw_len)
+    logger.info("pipeline_started", raw_text_len=raw_len, raw_text=text[:100])
 
     clean = ArabicInput(text=(text or "").strip())
     logger.info(

@@ -60,7 +60,9 @@ def run_pipeline(text: str, model_loader: ModelLoader) -> ComplaintResponse:
     logger = get_logger("pipeline")
 
     raw_len = len(text or "")
-    logger.info("pipeline_started", raw_text_len=raw_len, raw_text=text.encode('utf-8', errors='ignore').decode('utf-8'))
+    # Log text in a way that Railway can handle
+    logger.info("pipeline_started", raw_text_len=raw_len)
+    logger.info(f"Input text: {text}")
 
     clean = ArabicInput(text=(text or "").strip())
     logger.info(

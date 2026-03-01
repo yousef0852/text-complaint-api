@@ -62,6 +62,7 @@ def run_pipeline(text: str, model_loader: ModelLoader) -> ComplaintResponse:
     raw_len = len(text or "")
     # Log text in a way that Railway can handle
     logger.info("pipeline_started", raw_text_len=raw_len)
+    print(f"[DEBUG] Input text: {text}")  # Console print as fallback
     logger.info(f"Input text: {text}")
 
     clean = ArabicInput(text=(text or "").strip())
@@ -165,5 +166,8 @@ def run_pipeline(text: str, model_loader: ModelLoader) -> ComplaintResponse:
         topic=topic,
         intent=intent,
         action=action,
-        meta={"model_version": "MARBERT-v2"},
+        meta={
+            "model_version": "MARBERT-v2",
+            "input_text": text[:100]  # Add input text to response
+        },
     )

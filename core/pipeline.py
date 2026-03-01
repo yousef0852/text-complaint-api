@@ -168,6 +168,6 @@ def run_pipeline(text: str, model_loader: ModelLoader) -> ComplaintResponse:
         action=action,
         meta={
             "model_version": "MARBERT-v2",
-            "input_text": text[:100]  # Add input text to response
+            "input_text": text.encode('utf-8').decode('unicode-escape')[:100]
         },
     )

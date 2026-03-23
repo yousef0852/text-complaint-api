@@ -1,8 +1,8 @@
-from sys import prefix
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from interfaces.api.predict_route import router as predict_router
+from interfaces.api.explain_route import router as explain_router
 from contextlib import asynccontextmanager
 from services.model_loader import ModelLoader
 from configs.exceptions import ModelLoadError, ConfigurationError, PredictionError
@@ -16,13 +16,11 @@ from interfaces.api.middlewares import RequestIdMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.model_loader = None
     print(" Environment Variables Check:")
     hf_token = os.getenv("HF_TOKEN")
-    print(f"   HF_TOKEN: {' Found' if hf_token else ' Missing'}")
-    if hf_token:
-        print(f"   Token length: {len(hf_token)} characters")
-        print(f"   Token starts with: {hf_token[:10]}...")
-    else:
+    print(f"   HF_TOKEN: {'set' if hf_token else 'missing'}")
+    if not hf_token:
         print("   HF_TOKEN not found - models might fail to load!")
     
     print("Loading model...")
@@ -115,6 +113,7 @@ app.add_middleware(
 )
 
 app.include_router(predict_router)
+app.include_router(explain_router)
 
 @app.get("/health")
 def health_check():
@@ -128,7 +127,6 @@ def debug_env():
         "HF_TOKEN": {
             "exists": settings.HF_TOKEN is not None,
             "length": len(settings.HF_TOKEN) if settings.HF_TOKEN else 0,
-            "starts_with": settings.HF_TOKEN[:10] + "..." if settings.HF_TOKEN else None
         },
         "thresholds": {
             "sentiment": settings.SENTIMENT_THRESHOLD,

@@ -4,6 +4,8 @@ AI-powered API that analyzes Arabic customer complaints using MARBERT-v2 models.
 
 ## Architecture
 
+### Request lifecycle (`POST /predict`)
+
 ```
 Request → Middleware (request_id + timing) → /predict Route
                                                   ↓
@@ -18,6 +20,46 @@ Request → Middleware (request_id + timing) → /predict Route
                                             JSON Response
 ```
 
+### Optional LLM explanation layer (`POST /explain-classification`)
+
+The rule engine and classifiers are **deterministic**. An OpenAI-compatible LLM may **only explain** the already computed labels and action; it does not change routing.
+
+```mermaid
+flowchart LR
+  req[Client] --> api[FastAPI]
+  api --> pipe[Pipeline]
+  pipe --> rules[Rule engine]
+  rules --> cls[ComplaintResponse]
+  cls --> opt{LLM enabled and API key set?}
+  opt -->|yes| llm[llm_service]
+  opt -->|no| out[JSON with explain_meta only]
+  llm --> val[Pydantic validation]
+  val --> out2[JSON + optional explanation]
+```
+
+**Design decisions**
+
+| Decision | Rationale |
+|----------|-------------|
+| Pipeline runs before any LLM call | Preserves deterministic boundaries; LLM sees fixed labels |
+| `llm_service` + `services/llm_prompts.py` | Centralized prompts; routes stay thin |
+| OpenAI-compatible HTTP API | Configurable `LLM_BASE_URL` for OpenAI or compatible hosts |
+| `response_format: json_object` + Pydantic | Validates structured explanation; rejects malformed output |
+| Fallback on failure | Classification always returned; `explanation` may be null |
+
+**LLM failure modes** (`explain_meta`)
+
+| `error_code` / `explain_source` | Meaning |
+|---------------------------------|--------|
+| `LLM_DISABLED` | `LLM_ENABLED=false` |
+| `MISSING_API_KEY` | No `OPENAI_API_KEY` |
+| `explain_source: disabled` | LLM not invoked |
+| `LLM_TIMEOUT` | Request exceeded `LLM_TIMEOUT_SECONDS` |
+| `LLM_HTTP_ERROR` | Non-2xx or network error from provider |
+| `LLM_INVALID_RESPONSE` | Unparseable JSON or schema mismatch |
+| `explain_source: llm` | Success; `explanation` populated |
+| `explain_source: fallback` | LLM failed; see `error_code` |
+
 ### Project Structure
 
 ```
@@ -28,13 +70,17 @@ Request → Middleware (request_id + timing) → /predict Route
 │   ├── model_loader.py              # HuggingFace model loading
 │   ├── sentiment_service.py         # Sentiment classification
 │   ├── topic_service.py             # Topic classification
-│   └── action_service.py            # Intent classification
+│   ├── action_service.py            # Intent classification
+│   ├── llm_service.py               # OpenAI-compatible explanation (timeouts, validation)
+│   └── llm_prompts.py               # Prompt templates for the explanation layer
 ├── interfaces/
 │   ├── api/
 │   │   ├── predict_route.py         # POST /predict endpoint
+│   │   ├── explain_route.py         # POST /explain-classification
 │   │   └── middlewares.py           # Request ID + timing middleware
 │   └── schemas/
 │       ├── complaint.py             # Pydantic request/response models
+│       ├── explain.py               # Explain-classification schemas
 │       └── enums.py                 # Label enums (Sentiment, Topic, Action)
 ├── configs/
 │   ├── config.py                    # Environment-based settings
@@ -44,6 +90,8 @@ Request → Middleware (request_id + timing) → /predict Route
 │   └── text_utils.py                # Arabic text normalization
 ├── tests/
 │   ├── test_api.py                  # API endpoint tests
+│   ├── test_explain_api.py          # Explain-classification route tests
+│   ├── test_llm_service.py          # LLM client and failure-mode tests
 │   └── test_pipeline.py             # Pipeline + rule engine tests
 ├── Dockerfile
 ├── docker-compose.yml
@@ -83,7 +131,13 @@ If any model's confidence drops below the threshold, the action is overridden to
 
 ### Environment Variables
 
-Create a `.env` file:
+Copy the template and edit (never commit `.env`):
+
+```bash
+cp .env.example .env
+```
+
+Then set at least `HF_TOKEN` and, for `/explain-classification` LLM explanations, `OPENAI_API_KEY`:
 
 ```env
 HF_TOKEN=hf_your_token_here
@@ -92,6 +146,14 @@ TOPIC_THRESHOLD=0.5
 INTENT_THRESHOLD=0.5
 ENABLE_CONFIDENCE_GUARDING=true
 ENABLE_PREDICTION_LOGGING=true
+
+# Optional: LLM explanation layer (POST /explain-classification)
+LLM_ENABLED=true
+OPENAI_API_KEY=
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4.1
+LLM_TIMEOUT_SECONDS=30
+LLM_MAX_COMPLETION_TOKENS=512
 ```
 
 ### Run with Docker
@@ -113,6 +175,16 @@ uvicorn main:app --reload
 ```
 
 ## API Endpoints
+
+### POST /explain-classification
+
+Runs the same pipeline as `/predict`, then optionally calls the LLM to produce a **structured explanation** (`summary`, `rationale`, `limitations`). If the LLM is disabled, misconfigured, or fails, the response still includes the full `classification`; `explanation` may be `null` and `explain_meta` describes why.
+
+```bash
+curl -X POST http://localhost:8000/explain-classification \
+  -H "Content-Type: application/json" \
+  -d '{"text": "التطبيق يعلق عند الدفع"}'
+```
 
 ### POST /predict
 
@@ -178,6 +250,8 @@ All logs are JSON-formatted via structlog. Every request gets a unique `request_
 | PredictionError | 500 | Model inference fails |
 | ValidationError | 422 | Invalid input (empty text, missing field) |
 
+LLM failures on `/explain-classification` do not return HTTP errors by default: check `explain_meta` and optional `explanation`.
+
 ## Tests
 
 ```bash
@@ -190,6 +264,7 @@ pytest tests/ -v
 |-----------|------------|
 | Framework | FastAPI |
 | NLP | HuggingFace Transformers (MARBERT-v2) |
+| Optional LLM | OpenAI-compatible API via httpx (async, timeouts) |
 | Validation | Pydantic v2 |
 | Logging | structlog (JSON) |
 | Container | Docker + docker-compose |

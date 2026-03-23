@@ -25,8 +25,6 @@ class ModelLoader:
         hf_token = os.getenv("HF_TOKEN")
         if not hf_token:
             raise ConfigurationError("HF_TOKEN", "Environment variable not found")
-        else:
-            print(f"HF_TOKEN found: {hf_token[:10]}...")
         
         try:
             print("Loading Sentiment Model...")

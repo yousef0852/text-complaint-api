@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends
 from interfaces.schemas.complaint import ComplaintRequest, ComplaintResponse
 from core.pipeline import run_pipeline
 from configs.config import settings
+from interfaces.api.dependencies import get_model_loader
 import json
 import os
 from datetime import datetime
@@ -27,9 +28,6 @@ def save_prediction_log(input_text: str, response: ComplaintResponse):
 
     with open(LOGS_FILE, "w", encoding="utf-8") as f:
         json.dump(entries, f, ensure_ascii=False, indent=2)
-
-def get_model_loader(request: Request):
-    return request.app.state.model_loader
 
 @router.post("", response_model=ComplaintResponse)
 async def predict_complaint(request: ComplaintRequest, loader = Depends(get_model_loader)):

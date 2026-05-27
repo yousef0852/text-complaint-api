@@ -27,11 +27,24 @@ checkpoints/
 *.onnx
 .huggingface/
 .cache/
+.hf_cache/
+mlruns/
+
+# Benchmark artifacts: keep REPORT.md (committed), drop raw rows
+benchmarks/results.csv
+
+# Node / Next.js (UI is committed but build outputs are not)
+ui/.next/
+ui/node_modules/
+ui/out/
+ui/.env.local
 
 data/
 datasets/
 *.csv
-*.json
+# Ignore loose JSON data dumps, not app config (ui/package.json, tsconfig.json)
+data/**/*.json
+logs/**/*.json
 *.jsonl
 *.parquet
 *.pkl

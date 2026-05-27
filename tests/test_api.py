@@ -1,17 +1,11 @@
+from unittest.mock import MagicMock, patch
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
-from interfaces.schemas.complaint import (
-    ComplaintRequest,
-    ComplaintResponse,
-    PredictionDetail,
-    ActionDetail
-)
-from interfaces.schemas.enums import SentimentLabel, TopicLabel, ActionLabel
-import pytest
+
 from interfaces.api.predict_route import router as predict_router
-
-
+from interfaces.schemas.complaint import ActionDetail, ComplaintResponse, PredictionDetail
+from interfaces.schemas.enums import ActionLabel, SentimentLabel, TopicLabel
 
 app = FastAPI()
 app.include_router(predict_router)

@@ -1,6 +1,9 @@
-from .enums import SentimentLabel, TopicLabel, ActionLabel
+from typing import Any, Dict, Union
+
 from pydantic import BaseModel, Field
-from typing import Union, Dict, Any
+
+from .enums import ActionLabel, SentimentLabel, TopicLabel
+
 
 class PredictionDetail(BaseModel):
     label: Union[SentimentLabel, TopicLabel, ActionLabel]

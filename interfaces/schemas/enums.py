@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class SentimentLabel(str, Enum):
     NEG = "NEG"
     NEU = "NEU"
@@ -10,7 +11,7 @@ class TopicLabel(str, Enum):
     TECH = "TECHNICAL"
     POLICY_SECURITY = "POLICY_SECURITY"
     FINANCIAL = "FINANCIAL"
-    
+
 
 class ActionLabel(str, Enum):
     REPORT_BUG = "REPORT_BUG"

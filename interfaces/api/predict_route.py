@@ -1,11 +1,16 @@
-from fastapi import APIRouter, Depends
-from interfaces.schemas.complaint import ComplaintRequest, ComplaintResponse
-from core.pipeline import run_pipeline
-from configs.config import settings
-from interfaces.api.dependencies import get_model_loader
 import json
 import os
 from datetime import datetime
+
+from fastapi import APIRouter, Depends
+
+from configs.config import settings
+from configs.logging import get_logger
+from core.pipeline import run_pipeline
+from interfaces.api.dependencies import get_model_loader
+from interfaces.schemas.complaint import ComplaintRequest, ComplaintResponse
+
+logger = get_logger("predict_route")
 
 router = APIRouter(prefix="/predict", tags=["Prediction"])
 
@@ -17,13 +22,18 @@ def save_prediction_log(input_text: str, response: ComplaintResponse):
 
     entries = []
     if os.path.exists(LOGS_FILE):
-        with open(LOGS_FILE, "r", encoding="utf-8") as f:
-            entries = json.load(f)
+        try:
+            with open(LOGS_FILE, "r", encoding="utf-8") as f:
+                entries = json.load(f)
+                if not isinstance(entries, list):
+                    entries = []
+        except (json.JSONDecodeError, OSError):
+            entries = []
 
     entries.append({
         "timestamp": datetime.now().isoformat(),
         "input_text": input_text,
-        "response": response.model_dump(mode="json")
+        "response": response.model_dump(mode="json"),
     })
 
     with open(LOGS_FILE, "w", encoding="utf-8") as f:
@@ -33,5 +43,11 @@ def save_prediction_log(input_text: str, response: ComplaintResponse):
 async def predict_complaint(request: ComplaintRequest, loader = Depends(get_model_loader)):
     result = run_pipeline(request.text, loader)
     if settings.ENABLE_PREDICTION_LOGGING:
-        save_prediction_log(request.text, result)
+        try:
+            save_prediction_log(request.text, result)
+        except Exception as exc:
+            logger.warning(
+                "prediction_log_failed",
+                error=str(exc),
+            )
     return result

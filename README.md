@@ -1,41 +1,57 @@
 # Text Complaint Analysis API
 
-AI-powered API that analyzes Arabic customer complaints using MARBERT-v2 models. It classifies sentiment, topic, and intent, then routes to an automated action via a rule engine.
+> Production-grade Arabic complaint classification with a deterministic rule engine and an optional LLM explanation layer. Built as an **AI Systems Engineering** portfolio project — the emphasis is on validation, failure handling, observability, and honest benchmarks.
+
+| | |
+|---|---|
+| Stack | FastAPI · MARBERT-v2 · OpenAI-compatible LLM · structlog · MLflow |
+| UI | Next.js 16 + Tailwind (`ui/`) |
+| Benchmark | 68.3% binary accuracy on OOD Arabic tweets (500 samples) — [REPORT](./benchmarks/REPORT.md) |
+| Latency | p50 96 ms · p95 253 ms (CPU, 3 classifiers per request) |
+| Error contract | Single envelope with `error_code` + `request_id` correlation |
+| Tests | `pytest tests/` |
+
+## Live demo
+
+A Next.js chat-style UI lives in [`ui/`](./ui). Run the API on `:8000` and the UI on `:3000`:
+
+```bash
+# terminal 1
+uvicorn main:app --reload
+
+# terminal 2
+cd ui && npm install && npm run dev
+```
+
+Then open <http://localhost:3000> and paste an Arabic complaint.
 
 ## Architecture
 
-### Request lifecycle (`POST /predict`)
-
-```
-Request → Middleware (request_id + timing) → /predict Route
-                                                  ↓
-                                            Pipeline:
-                                              1. Arabic text cleaning
-                                              2. Sentiment classification
-                                              3. Topic classification
-                                              4. Intent classification
-                                              5. Rule engine → action
-                                              6. Confidence guard
-                                                  ↓
-                                            JSON Response
-```
-
-### Optional LLM explanation layer (`POST /explain-classification`)
-
-The rule engine and classifiers are **deterministic**. An OpenAI-compatible LLM may **only explain** the already computed labels and action; it does not change routing.
-
 ```mermaid
 flowchart LR
-  req[Client] --> api[FastAPI]
-  api --> pipe[Pipeline]
-  pipe --> rules[Rule engine]
-  rules --> cls[ComplaintResponse]
-  cls --> opt{LLM enabled and API key set?}
-  opt -->|yes| llm[llm_service]
-  opt -->|no| out[JSON with explain_meta only]
-  llm --> val[Pydantic validation]
-  val --> out2[JSON + optional explanation]
+    Client[Client / UI] -->|POST /predict| MW[RequestIdMiddleware\nrequest_id, timing]
+    MW --> Route[/predict route/]
+    Route --> Pipe[Pipeline]
+    Pipe --> Clean[Arabic text cleaning]
+    Clean --> Sent[Sentiment classifier\nMARBERT-v2]
+    Clean --> Topic[Topic classifier\nMARBERT-v2]
+    Clean --> Action[Action classifier\nMARBERT-v2]
+    Sent --> Rules[Rule engine]
+    Topic --> Rules
+    Action --> Rules
+    Rules --> Guard{Confidence guard\nany score < threshold?}
+    Guard -- yes --> Manual[action = MANUAL_REVIEW]
+    Guard -- no --> Auto[deterministic action]
+    Manual --> Resp[JSON response\nwith request_id]
+    Auto --> Resp
+
+    Route -. /explain-classification .-> LLM[LLM service\nhttpx + timeout + JSON schema]
+    LLM -. fallback on error .-> Resp
 ```
+
+### Request lifecycle (`POST /predict`)
+
+`Request → RequestIdMiddleware → /predict → Pipeline (clean → sentiment → topic → action → rules → confidence guard) → JSON response`
 
 **Design decisions**
 
@@ -127,6 +143,33 @@ The action is determined by combining all three model outputs:
 
 If any model's confidence drops below the threshold, the action is overridden to `MANUAL_REVIEW` to prevent wrong automated decisions.
 
+## Benchmark
+
+The sentiment model is fine-tuned on Saudi government complaints. To measure
+**out-of-distribution generalization** (the real production case), it is
+benchmarked on a different distribution: general Arabic tweets from
+[`arbml/Arabic_Sentiment_Twitter_Corpus`](https://huggingface.co/datasets/arbml/Arabic_Sentiment_Twitter_Corpus).
+
+| Metric | Value |
+|---|---|
+| Sample size | 500 (stratified, seed 42) |
+| Decided predictions (NEG or POS) | 186 / 500 (37.2%) |
+| Abstentions (NEU) | 314 (62.8%) — routed to manual review in production |
+| **Accuracy on decided** | **68.3%** |
+| F1 (POS) | 0.674 |
+| Latency p50 | 96 ms (CPU, all 3 classifiers) |
+| Latency p95 | 253 ms |
+| Pipeline errors | 0% |
+
+Full breakdown, confusion matrix, confidence distributions, and honest caveats: [`benchmarks/REPORT.md`](./benchmarks/REPORT.md).
+
+Reproduce locally:
+
+```bash
+python -m benchmarks.run_benchmark --n 500
+python -m benchmarks.analyze
+```
+
 ## Setup
 
 ### Environment Variables
@@ -137,24 +180,11 @@ Copy the template and edit (never commit `.env`):
 cp .env.example .env
 ```
 
-Then set at least `HF_TOKEN` and, for `/explain-classification` LLM explanations, `OPENAI_API_KEY`:
+`.env.example` is the source of truth for all supported variables (Hugging Face, LLM, confidence guard, operational flags). At minimum, set:
 
-```env
-HF_TOKEN=hf_your_token_here
-SENTIMENT_THRESHOLD=0.5
-TOPIC_THRESHOLD=0.5
-INTENT_THRESHOLD=0.5
-ENABLE_CONFIDENCE_GUARDING=true
-ENABLE_PREDICTION_LOGGING=true
-
-# Optional: LLM explanation layer (POST /explain-classification)
-LLM_ENABLED=true
-OPENAI_API_KEY=
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_MODEL=gpt-4.1
-LLM_TIMEOUT_SECONDS=30
-LLM_MAX_COMPLETION_TOKENS=512
-```
+- `HF_TOKEN` — required to download the 3 MARBERT classifiers.
+- `OPENAI_API_KEY` — only if you want `/explain-classification` to call the LLM.
+- `MLFLOW_TRACKING_URI` — `file:./mlruns` for local runs, `file:///app/mlruns` inside Docker.
 
 ### Run with Docker
 
@@ -167,12 +197,51 @@ The API will be available at `http://localhost:8000`.
 
 ### Run Locally
 
+Using `uv` (recommended):
+
+```bash
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+Or plain `venv`:
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate    # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn main:app --reload
 ```
+
+## Startup & Model Loading
+
+On startup, the app:
+
+1. Configures MLflow (`MLFLOW_TRACKING_URI`, default `file:///app/mlruns`).
+2. Verifies `HF_TOKEN`.
+3. Downloads and loads sentiment, topic, and action models in order.
+
+### Strict vs degraded startup
+
+| `ALLOW_DEGRADED_STARTUP` | Behavior | When to use |
+|--------------------------|----------|-------------|
+| `false` (default) | App fails to start if any model fails to load. `/ready` returns 503. | Production, staging, anywhere health checks gate traffic. |
+| `true` | App still starts even if models fail. `/ready` still returns 503, so traffic is still blocked. | Local debugging only (e.g., exploring routes/docs without waiting on model downloads). |
+
+### First-run notes
+
+- First boot downloads ~1.5–2 GB of model weights. Allow 1–2 minutes.
+- Models are cached under `~/.cache/huggingface/` (or the container's default cache dir).
+- Subsequent restarts load from cache and are fast.
+
+### Hugging Face models: 404 / “Repository Not Found”
+
+The default model IDs (`Ysfxjo/marbert-complaint-sentiment`, etc.) must exist on the Hub **and** your `HF_TOKEN` must be allowed to read them (public repos work with any valid token; **private** repos require a token from an account with access).
+
+- If you see **404** on `config.json` or **`additional_chat_templates`**: confirm the repo URL in the browser while logged in, or set **`HF_MODEL_SENTIMENT`**, **`HF_MODEL_TOPIC`**, **`HF_MODEL_ACTION`** in `.env` to repos you control. The service code expects classifier outputs **`LABEL_0`, `LABEL_1`, …** as in the original fine-tunes; other checkpoints need matching label maps in `services/*_service.py`.
+- This repo pins **`transformers` 4.x** (`requirements.txt`) to avoid extra Hub fetches that some **v5** installs trigger on text-classification models. After pulling changes, run: `pip install -r requirements.txt` again.
 
 ## API Endpoints
 
@@ -227,7 +296,16 @@ Response:
 
 ### GET /health
 
-Returns `{"status": "ok"}` when the service is running.
+Liveness probe. Returns `{"status": "ok"}` whenever the process is alive — does **not** reflect model readiness.
+
+### GET /ready
+
+Readiness probe. Returns:
+
+- `200 {"status": "ready"}` when all 3 classifiers are loaded.
+- `503` with `error_code: MODELS_NOT_READY` otherwise.
+
+Use `/ready` for load balancer / Kubernetes `readinessProbe` so unready instances don't receive traffic. Use `/health` only for liveness.
 
 ## Observability
 
@@ -241,16 +319,44 @@ All logs are JSON-formatted via structlog. Every request gets a unique `request_
 {"event": "Request completed", "status_code": 200, "duration_ms": 234.41, "request_id": "c72dc0a5-..."}
 ```
 
-### Error Handling
+### Error Contract
 
-| Exception | Status Code | When |
-|-----------|-------------|------|
-| ModelLoadError | 503 | Model fails to load from HuggingFace |
-| ConfigurationError | 400 | Missing env vars (e.g., HF_TOKEN) |
-| PredictionError | 500 | Model inference fails |
-| ValidationError | 422 | Invalid input (empty text, missing field) |
+All error responses follow one envelope:
 
-LLM failures on `/explain-classification` do not return HTTP errors by default: check `explain_meta` and optional `explanation`.
+```json
+{
+  "error": "ERROR_NAME",
+  "error_code": "STABLE_CODE",
+  "message": "Human readable summary",
+  "details": {},
+  "request_id": "uuid"
+}
+```
+
+`request_id` also appears in the `x-request-id` response header, so client logs and server logs can be correlated.
+
+| HTTP | error_code | When |
+|------|------------|------|
+| 422  | `INVALID_REQUEST` | Pydantic validation failed (empty text, missing field, etc.) |
+| 503  | `MODELS_NOT_READY` | App is up but models are not loaded (see `/ready`) |
+| 503  | `MODEL_LOAD_ERROR` | A specific model failed during load |
+| 400  | `CONFIG_ERROR` | Missing/invalid env var (e.g., `HF_TOKEN`) |
+| 500  | `PREDICTION_ERROR` | Classifier returned unexpected output (e.g., unknown label) — no silent fallback |
+| 500  | `UNHANDLED_EXCEPTION` | Any unhandled server error |
+| 4xx  | `HTTP_<code>` | Generic HTTP error (e.g., `HTTP_404` Not Found) |
+
+LLM failures on `/explain-classification` do **not** return HTTP errors. The deterministic `classification` is always returned; check `explain_meta.error_code` and the optional `explanation` field.
+
+## Known Failures & Ops Notes
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| `OSError: Read-only file system: '/app'` on local startup | MLflow defaulting to Docker path | Set `MLFLOW_TRACKING_URI=file:./mlruns` in `.env` |
+| `/health` is 200 but `/predict` returns 503 `MODELS_NOT_READY` | Models did not load successfully | Check startup logs for `model_loading_failed` and `hf_token_check` |
+| HF 404 on `config.json` during model load | `HF_TOKEN` lacks access to a model repo, or repo ID changed | Verify repo in browser while logged in, or override `HF_MODEL_*` env vars |
+| First request to `/predict` is slow (~2-5s) | Cold model warm-up / first cache fill | Expected — subsequent requests are fast |
+| `/explain-classification` returns `explanation: null` | LLM disabled, missing key, timed out, or returned invalid JSON | Inspect `explain_meta.error_code` (`LLM_DISABLED`, `MISSING_API_KEY`, `LLM_TIMEOUT`, `LLM_HTTP_ERROR`, `LLM_INVALID_RESPONSE`) |
+| `prediction_log_failed` warning in logs | `logs/predictions.json` is corrupt or not writable | Logging is best-effort and never fails the request; safe to delete the file to reset |
 
 ## Tests
 

@@ -6,6 +6,7 @@ services:
     volumes:
       - models_cache:/root/.cache/huggingface
       - ./logs:/app/logs
+      - ./mlruns:/app/mlruns
     env_file:
       - .env
     restart: unless-stopped

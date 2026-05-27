@@ -6,6 +6,7 @@ import time
 from typing import Any, Dict, Optional, Tuple
 
 import httpx
+import mlflow
 
 from configs.config import Settings
 from configs.logging import get_logger
@@ -34,6 +35,7 @@ def _parse_explanation_json(raw: str) -> ClassificationExplainDetail:
     return ClassificationExplainDetail.model_validate(data)
 
 
+@mlflow.trace(name="explain_classification", span_type="LLM")
 async def explain_classification(
     *,
     text: str,
@@ -83,8 +85,11 @@ async def explain_classification(
     started = time.perf_counter()
 
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            r = await client.post(url, headers=headers, json=payload)
+        with mlflow.start_span(name="httpx_chat_completions", span_type="RETRIEVER") as span:
+            span.set_inputs({"url": url, "model": settings.LLM_MODEL})
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                r = await client.post(url, headers=headers, json=payload)
+            span.set_outputs({"status_code": r.status_code})
     except httpx.TimeoutException:
         elapsed_ms = (time.perf_counter() - started) * 1000
         logger.warning("llm_timeout", latency_ms=elapsed_ms)
@@ -130,7 +135,7 @@ async def explain_classification(
 
     try:
         detail = _parse_explanation_json(content)
-    except Exception as e:
+    except Exception:
         logger.warning("llm_invalid_json", exc_info=True)
         meta["explain_source"] = "fallback"
         meta["raw_content_preview"] = (content or "")[:400]
